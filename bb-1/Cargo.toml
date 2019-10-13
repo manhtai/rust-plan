@@ -1,5 +1,5 @@
 [package]
-name = "bb-1"
+name = "bb"
 version = "0.1.0"
 authors = ["manhtai"]
 edition = "2018"
