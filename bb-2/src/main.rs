@@ -53,21 +53,23 @@ fn ron_to_vec() -> Result<()> {
 fn bson_to_file() -> Result<()> {
     println!("BSON to File");
 
-    let mut arr: Vec<Move> = Vec::with_capacity(1000);
-    for x in 0..1000 {
+    let mut arr: Vec<Move> = Vec::with_capacity(10);
+    for x in 0..10 {
         arr.push(Move { square: x });
     }
 
     let mut file = File::create(FILE_NAME)?;
+    let mut doc = bson::Document::new();
     for a in arr {
         let a_bson = bson::to_bson(&a).unwrap();
-        println!("{:?}", a_bson);
-        writeln!(file, "{}", a_bson.to_string())?;
+        doc.insert(a.square.to_string(), a_bson);
     }
+    println!("doc: {:?}", doc);
 
+    bson::encode_document(&mut file, &doc).unwrap();
     let mut file = File::open(FILE_NAME)?;
-    let mut b_str = String::new();
-    file.read_to_string(&mut b_str)?;
+    let doc = bson::decode_document(&mut file).unwrap();
+    println!("doc: {:?}", doc);
 
     Ok(())
 }
