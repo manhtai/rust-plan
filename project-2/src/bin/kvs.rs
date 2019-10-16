@@ -27,7 +27,7 @@ fn main() -> Result<()> {
         print!(env!("CARGO_PKG_VERSION"))
     }
 
-    let mut store = KvStore::open(Path::new("target/stored.db"))?;
+    let mut store = KvStore::open(Path::new("./target/"))?;
 
     if let Some(matches) = matches.subcommand_matches("set") {
         if let Some(key) = matches.value_of("key") {

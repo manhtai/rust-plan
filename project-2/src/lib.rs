@@ -19,7 +19,7 @@ enum Command {
     Remove(String),
 }
 
-static FILENAME: &str = "target/store.db";
+static FILENAME: &str = "store.db";
 
 impl fmt::Debug for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,10 +65,11 @@ impl KvStore {
     }
 
     pub fn open(path: &Path) -> Result<KvStore> {
-        match OpenOptions::new().read(true).create(true).open(path) {
+        let full_path = path.join(FILENAME);
+        match OpenOptions::new().read(true).create(true).open(&full_path) {
             Ok(file) => {
                 let mut store = KvStore::new();
-                store.path = path.to_str().unwrap_or(FILENAME).to_string();
+                store.path = full_path.to_str().unwrap().to_string();
 
                 let reader = BufReader::new(file);
                 for line in reader.lines() {
@@ -92,10 +93,10 @@ impl KvStore {
     fn load(store: &mut KvStore, command: &Command) -> Result<()> {
         match command {
             Command::Set(key, value) => {
-                store.set(key.to_owned(), value.to_owned());
+                store.storage.insert(key.to_owned(), value.to_owned());
             }
             Command::Remove(key) => {
-                store.remove(key.to_owned());
+                store.storage.remove(key);
             }
         }
 
