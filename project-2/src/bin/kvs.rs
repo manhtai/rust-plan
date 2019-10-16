@@ -27,7 +27,7 @@ fn main() -> Result<()> {
         print!(env!("CARGO_PKG_VERSION"))
     }
 
-    let mut store = KvStore::open(Path::new("./target/"))?;
+    let mut store = KvStore::open(Path::new("."))?;
 
     if let Some(matches) = matches.subcommand_matches("set") {
         if let Some(key) = matches.value_of("key") {
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
             match store.get(key.to_owned()) {
                 Ok(option) => match option {
                     Some(value) => println!("{}", value),
-                    _ => ()
+                    None => println!("Key not found"),
                 },
                 Err(error) => {
                     println!("{:?}", error);
