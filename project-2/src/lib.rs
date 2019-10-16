@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::{OpenOptions, File};
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::result;
@@ -22,7 +22,6 @@ enum Command {
     Remove(String),
 }
 
-
 impl fmt::Debug for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -35,7 +34,7 @@ impl fmt::Debug for KvError {
 
 pub type Result<T> = result::Result<T, KvError>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KvStore {
     storage: HashMap<String, String>,
     path: String,
@@ -44,7 +43,10 @@ pub struct KvStore {
 impl KvStore {
     pub fn new() -> Self {
         let storage = HashMap::new();
-        KvStore { storage, path: FILENAME.to_string() }
+        KvStore {
+            storage,
+            path: FILENAME.to_string(),
+        }
     }
 
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
@@ -119,24 +121,43 @@ impl KvStore {
 
         // Do compaction
         if count > COMPACT_LIMIT {
-            if let Ok(mut file) = OpenOptions::new().create(true).write(true).truncate(true).open(path) {
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)
+            {
                 for (k, v) in &store.storage {
                     KvStore::write_command(&mut file, &Command::Set(k.to_owned(), v.to_owned()))?;
                 }
 
                 // Reset count
-                if let Ok(mut file) = OpenOptions::new().create(true).write(true).truncate(true).open(path_count) {
-                    KvStore::write_command(&mut file, &Command::Set("count".to_owned(), "0".to_owned()))?;
+                if let Ok(mut file) = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path_count)
+                {
+                    KvStore::write_command(
+                        &mut file,
+                        &Command::Set("count".to_owned(), "0".to_owned()),
+                    )?;
                 }
             }
-        } else {
-            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-                KvStore::write_command(&mut file, &command)?;
+        } else if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+            KvStore::write_command(&mut file, &command)?;
 
-                // Increment count
-                if let Ok(mut file) = OpenOptions::new().create(true).write(true).truncate(true).open(path_count) {
-                    KvStore::write_command(&mut file, &Command::Set("count".to_owned(), (count + 1).to_string()))?;
-                }
+            // Increment count
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path_count)
+            {
+                KvStore::write_command(
+                    &mut file,
+                    &Command::Set("count".to_owned(), (count + 1).to_string()),
+                )?;
             }
         }
 

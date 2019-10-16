@@ -1,5 +1,5 @@
-use std::process::exit;
 use std::path::Path;
+use std::process::exit;
 
 use clap::{App, Arg, SubCommand};
 
@@ -9,18 +9,23 @@ fn main() -> Result<()> {
     let matches = App::new("kvs")
         .version(env!("CARGO_PKG_VERSION"))
         .author("manhtai")
-        .arg(Arg::with_name("V")
-            .help("Show package version"))
-        .subcommand(SubCommand::with_name("get")
-            .help("Get value from key")
-            .arg(Arg::with_name("key").required(true)))
-        .subcommand(SubCommand::with_name("set")
-            .help("Get value from key")
-            .arg(Arg::with_name("key").required(true))
-            .arg(Arg::with_name("value").required(true)))
-        .subcommand(SubCommand::with_name("rm")
-            .help("Remove key")
-            .arg(Arg::with_name("key").required(true)))
+        .arg(Arg::with_name("V").help("Show package version"))
+        .subcommand(
+            SubCommand::with_name("get")
+                .help("Get value from key")
+                .arg(Arg::with_name("key").required(true)),
+        )
+        .subcommand(
+            SubCommand::with_name("set")
+                .help("Get value from key")
+                .arg(Arg::with_name("key").required(true))
+                .arg(Arg::with_name("value").required(true)),
+        )
+        .subcommand(
+            SubCommand::with_name("rm")
+                .help("Remove key")
+                .arg(Arg::with_name("key").required(true)),
+        )
         .get_matches();
 
     if matches.is_present("V") {
@@ -32,9 +37,8 @@ fn main() -> Result<()> {
     if let Some(matches) = matches.subcommand_matches("set") {
         if let Some(key) = matches.value_of("key") {
             if let Some(value) = matches.value_of("value") {
-                match store.set(key.to_owned(), value.to_owned()) {
-                    Err(err) => println!("{:?}", err),
-                    _ => ()
+                if let Err(err) = store.set(key.to_owned(), value.to_owned()) {
+                    println!("{:?}", err)
                 }
                 exit(0)
             }
@@ -50,7 +54,7 @@ fn main() -> Result<()> {
                 },
                 Err(error) => {
                     println!("{:?}", error);
-                },
+                }
             };
             exit(0)
         }
@@ -59,12 +63,9 @@ fn main() -> Result<()> {
     if let Some(matches) = matches.subcommand_matches("rm") {
         if let Some(key) = matches.value_of("key") {
             let k = key.to_owned();
-            match store.remove(k) {
-                Err(error) =>  {
-                    println!("{:?}", error);
-                    exit(1)
-                },
-                _ => ()
+            if let Err(error) = store.remove(k) {
+                println!("{:?}", error);
+                exit(1)
             };
             exit(0)
         }
@@ -72,4 +73,3 @@ fn main() -> Result<()> {
 
     exit(1)
 }
-

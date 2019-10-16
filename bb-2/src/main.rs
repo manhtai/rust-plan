@@ -1,13 +1,13 @@
-use serde::{Serialize, Deserialize};
-use serde_json;
-use ron;
-use std::fs::File;
-use std::io::{Write, Read, Result};
 use bson;
+use ron;
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::fs::File;
+use std::io::{Read, Result, Write};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Move {
-    square: i32
+    square: i32,
 }
 
 const FILE_NAME: &str = "target/a.txt";
