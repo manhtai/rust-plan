@@ -26,3 +26,4 @@ walkdir = "2.2.7"
 [[bench]]
 name = "engine_bench"
 harness = false
+path = "."
