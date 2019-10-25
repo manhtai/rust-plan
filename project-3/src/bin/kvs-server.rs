@@ -1,9 +1,39 @@
 use std::path::Path;
-use std::process::exit;
 
 use clap::{App, Arg, SubCommand};
 
-use kvs::{KvStore, Result};
+use kvs::{Command, KvStore, Result};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
+fn exchange(stream: &mut TcpStream, store: &mut KvStore) -> Result<()> {
+    let mut buf = String::new();
+    stream.read_to_string(&mut buf).unwrap();
+    let command: Command = serde_json::from_str(&buf).unwrap();
+
+    let default = "".to_owned();
+    let result = match command {
+        Command::Set(key, value) => match store.set(key.to_owned(), value.to_owned()) {
+            Err(e) => e.to_string(),
+            _ => default,
+        },
+        Command::Remove(key) => match store.remove(key) {
+            Err(e) => e.to_string(),
+            _ => default,
+        },
+        Command::Get(key) => match store.get(key) {
+            Ok(v) => match v {
+                Some(value) => value,
+                _ => default,
+            },
+            Err(e) => e.to_string(),
+        },
+    };
+
+    stream.write_all(result.as_bytes()).unwrap();
+    stream.flush().unwrap();
+    Ok(())
+}
 
 fn main() -> Result<()> {
     let matches = App::new("kvs")
@@ -11,20 +41,14 @@ fn main() -> Result<()> {
         .author("manhtai")
         .arg(Arg::with_name("V").help("Show package version"))
         .subcommand(
-            SubCommand::with_name("get")
-                .help("Get value from key")
-                .arg(Arg::with_name("key").required(true)),
+            SubCommand::with_name("--addr")
+                .help("Server address")
+                .arg(Arg::with_name("address")),
         )
         .subcommand(
-            SubCommand::with_name("set")
-                .help("Get value from key")
-                .arg(Arg::with_name("key").required(true))
-                .arg(Arg::with_name("value").required(true)),
-        )
-        .subcommand(
-            SubCommand::with_name("rm")
-                .help("Remove key")
-                .arg(Arg::with_name("key").required(true)),
+            SubCommand::with_name("--engine")
+                .help("KV engine")
+                .arg(Arg::with_name("name")),
         )
         .get_matches();
 
@@ -34,42 +58,13 @@ fn main() -> Result<()> {
 
     let mut store = KvStore::open(Path::new("."))?;
 
-    if let Some(matches) = matches.subcommand_matches("set") {
-        if let Some(key) = matches.value_of("key") {
-            if let Some(value) = matches.value_of("value") {
-                if let Err(err) = store.set(key.to_owned(), value.to_owned()) {
-                    println!("{:?}", err)
-                }
-                exit(0)
-            }
-        }
+    let addr = matches.value_of("--addr").unwrap_or("127.0.0.1:4000");
+    let listener = TcpListener::bind(addr).unwrap();
+
+    for stream in listener.incoming() {
+        let mut stream = stream.unwrap();
+        exchange(&mut stream, &mut store);
     }
 
-    if let Some(matches) = matches.subcommand_matches("get") {
-        if let Some(key) = matches.value_of("key") {
-            match store.get(key.to_owned()) {
-                Ok(option) => match option {
-                    Some(value) => println!("{}", value),
-                    None => println!("Key not found"),
-                },
-                Err(error) => {
-                    println!("{:?}", error);
-                }
-            };
-            exit(0)
-        }
-    }
-
-    if let Some(matches) = matches.subcommand_matches("rm") {
-        if let Some(key) = matches.value_of("key") {
-            let k = key.to_owned();
-            if let Err(error) = store.remove(k) {
-                println!("{:?}", error);
-                exit(1)
-            };
-            exit(0)
-        }
-    }
-
-    exit(1)
+    Ok(())
 }

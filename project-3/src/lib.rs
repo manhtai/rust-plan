@@ -17,12 +17,23 @@ pub enum KvError {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-enum Command {
+pub enum Command {
     Set(String, String),
     Remove(String),
+    Get(String),
 }
 
 impl fmt::Debug for KvError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KvError::KeyNotFound => write!(f, "Key not found"),
+            KvError::IoError(err) => write!(f, "IO error: {}", err),
+            KvError::SerdeError(err) => write!(f, "Serde error: {}", err),
+        }
+    }
+}
+
+impl fmt::Display for KvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KvError::KeyNotFound => write!(f, "Key not found"),
@@ -100,6 +111,7 @@ impl KvStore {
             Command::Remove(key) => {
                 store.storage.remove(key);
             }
+            _ => (),
         }
 
         Ok(())
@@ -174,5 +186,3 @@ impl KvStore {
 }
 
 pub struct KvsEngine;
-
-
