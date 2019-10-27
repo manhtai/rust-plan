@@ -1,12 +1,13 @@
 use std::path::Path;
 
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
 
-use kvs::{Command, KvStore, Result};
+use kvs::{Command, KvStore, KvsEngine, SledKvsEngine, Result};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
-fn exchange(stream: &mut TcpStream, store: &mut KvStore) -> Result<()> {
+
+fn exchange(stream: &mut TcpStream, store: &mut dyn KvsEngine) -> Result<()> {
     let mut buf = String::new();
     stream.read_to_string(&mut buf).unwrap();
     let command: Command = serde_json::from_str(&buf).unwrap();
@@ -40,15 +41,17 @@ fn main() -> Result<()> {
         .version(env!("CARGO_PKG_VERSION"))
         .author("manhtai")
         .arg(Arg::with_name("V").help("Show package version"))
-        .subcommand(
-            SubCommand::with_name("--addr")
-                .help("Server address")
-                .arg(Arg::with_name("address")),
+        .arg(Arg::with_name("address")
+            .long("addr")
+            .help("Server address")
+            .takes_value(true)
+            .value_name("address")
         )
-        .subcommand(
-            SubCommand::with_name("--engine")
-                .help("KV engine")
-                .arg(Arg::with_name("name")),
+        .arg(Arg::with_name("engine")
+            .long("engine")
+            .help("KV engine")
+            .takes_value(true)
+            .value_name("engine")
         )
         .get_matches();
 
@@ -56,14 +59,25 @@ fn main() -> Result<()> {
         print!(env!("CARGO_PKG_VERSION"))
     }
 
-    let mut store = KvStore::open(Path::new("."))?;
+    let engine = matches.value_of("engine").unwrap_or("kvs");
+    let mut kvs_;
+    let mut sled_;
+    let mut store: &mut dyn KvsEngine;
+    if engine == "kvs" {
+        kvs_ = KvStore::open(Path::new("."));
+        store = &mut kvs_;
+    } else {
+        sled_ = SledKvsEngine::open(Path::new("."));
+        store = &mut sled_;
+    }
 
-    let addr = matches.value_of("--addr").unwrap_or("127.0.0.1:4000");
+    let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+    println!("Server listen in: {}", addr);
     let listener = TcpListener::bind(addr).unwrap();
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        exchange(&mut stream, &mut store);
+        exchange(&mut stream, store);
     }
 
     Ok(())

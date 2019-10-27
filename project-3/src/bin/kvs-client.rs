@@ -22,23 +22,33 @@ fn main() -> Result<()> {
         .subcommand(
             SubCommand::with_name("get")
                 .help("Get value from key")
-                .arg(Arg::with_name("key").required(true)),
+                .arg(Arg::with_name("key").required(true))
+                .arg(Arg::with_name("addr")
+                    .long("addr")
+                    .takes_value(true)
+                    .value_name("address")
+                    .help("Server address"))
         )
         .subcommand(
             SubCommand::with_name("set")
                 .help("Get value from key")
                 .arg(Arg::with_name("key").required(true))
-                .arg(Arg::with_name("value").required(true)),
+                .arg(Arg::with_name("value").required(true))
+                .arg(Arg::with_name("addr")
+                    .long("addr")
+                    .takes_value(true)
+                    .value_name("address")
+                    .help("Server address"))
         )
         .subcommand(
             SubCommand::with_name("rm")
                 .help("Remove key")
-                .arg(Arg::with_name("key").required(true)),
-        )
-        .subcommand(
-            SubCommand::with_name("--addr")
-                .help("Server address")
-                .arg(Arg::with_name("address")),
+                .arg(Arg::with_name("key").required(true))
+                .arg(Arg::with_name("addr")
+                    .long("addr")
+                    .takes_value(true)
+                    .value_name("address")
+                    .help("Server address"))
         )
         .get_matches();
 
@@ -46,14 +56,14 @@ fn main() -> Result<()> {
         print!(env!("CARGO_PKG_VERSION"))
     }
 
-    let addr = matches.value_of("--addr").unwrap_or("127.0.0.1:4000");
-    let mut stream = TcpStream::connect(addr).unwrap();
 
     if let Some(matches) = matches.subcommand_matches("set") {
+        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let mut stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             if let Some(value) = matches.value_of("value") {
                 if let Err(err) =
-                    exchange(&mut stream, &Command::Set(key.to_owned(), value.to_owned()))
+                exchange(&mut stream, &Command::Set(key.to_owned(), value.to_owned()))
                 {
                     println!("{:?}", err)
                 }
@@ -63,6 +73,8 @@ fn main() -> Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("get") {
+        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let mut stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             match exchange(&mut stream, &Command::Get(key.to_owned())) {
                 Ok(value) => {
@@ -77,6 +89,8 @@ fn main() -> Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("rm") {
+        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let mut stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             if let Err(error) = exchange(&mut stream, &Command::Get(key.to_owned())) {
                 println!("{:?}", error);

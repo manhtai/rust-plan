@@ -4,6 +4,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::result;
+use sled::Db;
+
 
 use serde::{Deserialize, Serialize};
 
@@ -45,62 +47,30 @@ impl fmt::Display for KvError {
 
 pub type Result<T> = result::Result<T, KvError>;
 
+pub trait KvsEngine {
+    fn set(&mut self, key: String, value: String) -> Result<()>;
+    fn get(&mut self, key: String) -> Result<Option<String>>;
+    fn remove(&mut self, key: String) -> Result<()>;
+    fn open(path: &Path) -> Self where Self: Sized;
+}
+
 #[derive(Debug, Default)]
 pub struct KvStore {
     storage: HashMap<String, String>,
     path: String,
 }
 
+pub struct SledKvsEngine {
+    storage: Db,
+}
+
 impl KvStore {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let storage = HashMap::new();
         KvStore {
             storage,
             path: FILENAME.to_string(),
         }
-    }
-
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        self.storage.insert(key.to_owned(), value.to_owned());
-        KvStore::save(&self, &Command::Set(key, value))?;
-        Ok(())
-    }
-
-    pub fn get(&self, key: String) -> Result<Option<String>> {
-        match self.storage.get(&key) {
-            Some(s) => Ok(Some(s.to_owned())),
-            None => Ok(None),
-        }
-    }
-
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        match self.get(key.to_owned())? {
-            Some(_) => {
-                self.storage.remove(&key);
-                KvStore::save(&self, &Command::Remove(key))?;
-                Ok(())
-            }
-            None => Err(KvError::KeyNotFound),
-        }
-    }
-
-    pub fn open(path: &Path) -> Result<KvStore> {
-        let full_path = path.join(FILENAME);
-        let mut store = KvStore::new();
-        store.path = full_path.to_str().unwrap().to_string();
-
-        if let Ok(file) = OpenOptions::new().read(true).open(&full_path) {
-            let reader = BufReader::new(file);
-            for line in reader.lines() {
-                if let Ok(cmd) = line {
-                    if let Ok(cmd) = serde_json::from_str::<Command>(&cmd) {
-                        KvStore::load(&mut store, &cmd)?;
-                    }
-                }
-            }
-        }
-
-        Ok(store)
     }
 
     fn load(store: &mut KvStore, command: &Command) -> Result<()> {
@@ -185,4 +155,66 @@ impl KvStore {
     }
 }
 
-pub struct KvsEngine;
+impl KvsEngine for KvStore {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        self.storage.insert(key.to_owned(), value.to_owned());
+        KvStore::save(&self, &Command::Set(key, value))?;
+        Ok(())
+    }
+
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        match self.storage.get(&key) {
+            Some(s) => Ok(Some(s.to_owned())),
+            None => Ok(None),
+        }
+    }
+
+    fn remove(&mut self, key: String) -> Result<()> {
+        match self.get(key.to_owned())? {
+            Some(_) => {
+                self.storage.remove(&key);
+                KvStore::save(&self, &Command::Remove(key))?;
+                Ok(())
+            }
+            None => Err(KvError::KeyNotFound),
+        }
+    }
+
+    fn open(path: &Path) -> KvStore {
+        let full_path = path.join(FILENAME);
+        let mut store = KvStore::new();
+        store.path = full_path.to_str().unwrap().to_string();
+
+        if let Ok(file) = OpenOptions::new().read(true).open(&full_path) {
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                if let Ok(cmd) = line {
+                    if let Ok(cmd) = serde_json::from_str::<Command>(&cmd) {
+                        KvStore::load(&mut store, &cmd);
+                    }
+                }
+            }
+        }
+
+        store
+    }
+}
+
+impl KvsEngine for SledKvsEngine {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        unimplemented!()
+    }
+
+    fn remove(&mut self, key: String) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn open(path: &Path) -> SledKvsEngine {
+        let storage = Db::open(path).unwrap();
+        SledKvsEngine { storage }
+    }
+}
