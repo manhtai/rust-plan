@@ -30,7 +30,7 @@ fn exchange(mut stream: TcpStream, command: &KvsCommand) -> () {
             exit(0)
         }
         KvsResult::Error(e) => {
-            println!("{}", e);
+            eprintln!("{}", e);
             exit(1)
         }
     }
@@ -48,7 +48,6 @@ fn main() -> Result<()> {
                 .arg(Arg::with_name("addr")
                     .long("addr")
                     .takes_value(true)
-                    .value_name("address")
                     .help("Server address"))
         )
         .subcommand(
@@ -59,7 +58,6 @@ fn main() -> Result<()> {
                 .arg(Arg::with_name("addr")
                     .long("addr")
                     .takes_value(true)
-                    .value_name("address")
                     .help("Server address"))
         )
         .subcommand(
@@ -69,7 +67,6 @@ fn main() -> Result<()> {
                 .arg(Arg::with_name("addr")
                     .long("addr")
                     .takes_value(true)
-                    .value_name("address")
                     .help("Server address"))
         )
         .get_matches();
@@ -80,7 +77,7 @@ fn main() -> Result<()> {
 
 
     if let Some(matches) = matches.subcommand_matches("set") {
-        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let addr = matches.value_of("addr").unwrap_or("127.0.0.1:4000");
         let stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             if let Some(value) = matches.value_of("value") {
@@ -90,7 +87,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("get") {
-        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let addr = matches.value_of("addr").unwrap_or("127.0.0.1:4000");
         let stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             exchange(stream, &KvsCommand::Get(key.to_owned()))
@@ -98,7 +95,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("rm") {
-        let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
+        let addr = matches.value_of("addr").unwrap_or("127.0.0.1:4000");
         let stream = TcpStream::connect(addr).unwrap();
         if let Some(key) = matches.value_of("key") {
             exchange(stream, &KvsCommand::Remove(key.to_owned()))
