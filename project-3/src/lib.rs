@@ -8,10 +8,12 @@ use sled::Db;
 
 
 use serde::{Deserialize, Serialize};
+use failure::_core::str::from_utf8;
 
 const FILENAME: &str = "store.db";
 const COMPACT_LIMIT: i32 = 1_000;
 
+#[derive(Serialize, Deserialize)]
 pub enum KvError {
     KeyNotFound,
     IoError(String),
@@ -19,10 +21,18 @@ pub enum KvError {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum Command {
+pub enum KvsCommand {
     Set(String, String),
     Remove(String),
     Get(String),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum KvsResult {
+    Some(String),
+    None,
+    Error(KvError),
+    Ok,
 }
 
 impl fmt::Debug for KvError {
@@ -73,12 +83,12 @@ impl KvStore {
         }
     }
 
-    fn load(store: &mut KvStore, command: &Command) -> Result<()> {
+    fn load(store: &mut KvStore, command: &KvsCommand) -> Result<()> {
         match command {
-            Command::Set(key, value) => {
+            KvsCommand::Set(key, value) => {
                 store.storage.insert(key.to_owned(), value.to_owned());
             }
-            Command::Remove(key) => {
+            KvsCommand::Remove(key) => {
                 store.storage.remove(key);
             }
             _ => (),
@@ -87,14 +97,14 @@ impl KvStore {
         Ok(())
     }
 
-    fn save(store: &KvStore, command: &Command) -> Result<()> {
+    fn save(store: &KvStore, command: &KvsCommand) -> Result<()> {
         let path = Path::new(&store.path);
         let path_count_str = format!("{}c", &store.path);
         let path_count = Path::new(&path_count_str);
 
         let mut count = 0;
         if let Ok(file) = OpenOptions::new().read(true).open(&path_count) {
-            if let Ok(Command::Set(key, value)) = serde_json::from_reader::<File, Command>(file) {
+            if let Ok(KvsCommand::Set(key, value)) = serde_json::from_reader::<File, KvsCommand>(file) {
                 if key == "count" {
                     count = value.parse().unwrap_or(0);
                 }
@@ -110,7 +120,7 @@ impl KvStore {
                 .open(path)
             {
                 for (k, v) in &store.storage {
-                    KvStore::write_command(&mut file, &Command::Set(k.to_owned(), v.to_owned()))?;
+                    KvStore::write_command(&mut file, &KvsCommand::Set(k.to_owned(), v.to_owned()))?;
                 }
 
                 // Reset count
@@ -122,7 +132,7 @@ impl KvStore {
                 {
                     KvStore::write_command(
                         &mut file,
-                        &Command::Set("count".to_owned(), "0".to_owned()),
+                        &KvsCommand::Set("count".to_owned(), "0".to_owned()),
                     )?;
                 }
             }
@@ -138,7 +148,7 @@ impl KvStore {
             {
                 KvStore::write_command(
                     &mut file,
-                    &Command::Set("count".to_owned(), (count + 1).to_string()),
+                    &KvsCommand::Set("count".to_owned(), (count + 1).to_string()),
                 )?;
             }
         }
@@ -146,7 +156,7 @@ impl KvStore {
         Ok(())
     }
 
-    fn write_command(file: &mut File, command: &Command) -> Result<()> {
+    fn write_command(file: &mut File, command: &KvsCommand) -> Result<()> {
         let cmd = serde_json::to_string(command).unwrap();
         match writeln!(file, "{}", cmd) {
             Ok(_) => Ok(()),
@@ -158,7 +168,7 @@ impl KvStore {
 impl KvsEngine for KvStore {
     fn set(&mut self, key: String, value: String) -> Result<()> {
         self.storage.insert(key.to_owned(), value.to_owned());
-        KvStore::save(&self, &Command::Set(key, value))?;
+        KvStore::save(&self, &KvsCommand::Set(key, value))?;
         Ok(())
     }
 
@@ -173,7 +183,7 @@ impl KvsEngine for KvStore {
         match self.get(key.to_owned())? {
             Some(_) => {
                 self.storage.remove(&key);
-                KvStore::save(&self, &Command::Remove(key))?;
+                KvStore::save(&self, &KvsCommand::Remove(key))?;
                 Ok(())
             }
             None => Err(KvError::KeyNotFound),
@@ -189,7 +199,7 @@ impl KvsEngine for KvStore {
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 if let Ok(cmd) = line {
-                    if let Ok(cmd) = serde_json::from_str::<Command>(&cmd) {
+                    if let Ok(cmd) = serde_json::from_str::<KvsCommand>(&cmd) {
                         KvStore::load(&mut store, &cmd);
                     }
                 }
@@ -202,19 +212,25 @@ impl KvsEngine for KvStore {
 
 impl KvsEngine for SledKvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()> {
-        unimplemented!()
+        &self.storage.insert(key.into_bytes(), value.into_bytes());
+        Ok(())
     }
 
     fn get(&mut self, key: String) -> Result<Option<String>> {
-        unimplemented!()
+       match &self.storage.get(key.into_bytes()) {
+           Ok(Some(value)) => Ok(Some(from_utf8(value.as_ref()).unwrap().to_string())),
+           Ok(None) => Ok(None),
+           Err(err) => Err(KvError::KeyNotFound),
+       }
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
-        unimplemented!()
+        &self.storage.remove(key);
+        Ok(())
     }
 
     fn open(path: &Path) -> SledKvsEngine {
-        let storage = Db::open(path).unwrap();
+        let storage = Db::open(path.join(FILENAME).join("sled")).unwrap();
         SledKvsEngine { storage }
     }
 }

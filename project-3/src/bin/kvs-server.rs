@@ -2,36 +2,38 @@ use std::path::Path;
 
 use clap::{App, Arg};
 
-use kvs::{Command, KvStore, KvsEngine, SledKvsEngine, Result};
-use std::io::{Read, Write};
+use kvs::{KvsCommand, KvsResult, KvStore, KvsEngine, SledKvsEngine, Result};
+use std::io::{Read, Write, BufReader, BufRead};
 use std::net::{TcpListener, TcpStream};
 
 
-fn exchange(stream: &mut TcpStream, store: &mut dyn KvsEngine) -> Result<()> {
+fn exchange(mut stream: TcpStream, store: &mut dyn KvsEngine) -> Result<()> {
     let mut buf = String::new();
-    stream.read_to_string(&mut buf).unwrap();
-    let command: Command = serde_json::from_str(&buf).unwrap();
+    let mut reader = BufReader::new(&stream);
+    reader.read_line(&mut buf);
+    print!("Receive: {}", buf);
 
-    let default = "".to_owned();
+    let command: KvsCommand = serde_json::from_str(&buf).unwrap();
+
     let result = match command {
-        Command::Set(key, value) => match store.set(key.to_owned(), value.to_owned()) {
-            Err(e) => e.to_string(),
-            _ => default,
+        KvsCommand::Set(key, value) => match store.set(key.to_owned(), value.to_owned()) {
+            Err(e) => KvsResult::Error(e),
+            _ => KvsResult::Ok,
         },
-        Command::Remove(key) => match store.remove(key) {
-            Err(e) => e.to_string(),
-            _ => default,
+        KvsCommand::Remove(key) => match store.remove(key) {
+            Err(e) => KvsResult::Error(e),
+            _ => KvsResult::Ok,
         },
-        Command::Get(key) => match store.get(key) {
+        KvsCommand::Get(key) => match store.get(key) {
             Ok(v) => match v {
-                Some(value) => value,
-                _ => default,
+                Some(value) => KvsResult::Some(value),
+                None => KvsResult::None,
             },
-            Err(e) => e.to_string(),
+            Err(e) => KvsResult::Error(e),
         },
     };
 
-    stream.write_all(result.as_bytes()).unwrap();
+    writeln!(stream, "{}", serde_json::to_string(&result).unwrap()).unwrap();
     stream.flush().unwrap();
     Ok(())
 }
@@ -77,7 +79,7 @@ fn main() -> Result<()> {
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        exchange(&mut stream, store);
+        exchange(stream, store);
     }
 
     Ok(())
