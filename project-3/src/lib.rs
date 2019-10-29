@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write, Read};
 use std::path::Path;
 use std::result;
 use sled::Db;
@@ -10,7 +10,7 @@ use sled::Db;
 use serde::{Deserialize, Serialize};
 use failure::_core::str::from_utf8;
 
-const FILENAME: &str = "store.db";
+const FILENAME: &str = "db";
 const COMPACT_LIMIT: i32 = 1_000;
 
 #[derive(Serialize, Deserialize)]
@@ -195,22 +195,32 @@ impl KvsEngine for KvStore {
         let mut store = KvStore::new();
         store.path = full_path.to_str().unwrap().to_string();
 
-        match OpenOptions::new().read(true).open(&full_path) {
-            Ok(file) => {
-                let reader = BufReader::new(file);
-                for line in reader.lines() {
-                    if let Ok(cmd) = line {
-                        match serde_json::from_str::<KvsCommand>(&cmd) {
-                            Ok(cmd) => Ok(KvStore::load(&mut store, &cmd)),
-                            Err(e) => Err(KvError::SerdeError(e.to_string())),
-                        };
-                    }
-                }
-            },
-            Err(_) => ()
+        if !full_path.exists() {
+            store.set("".to_owned(), "".to_owned());
+            return Ok(store);
+        } else {
+            let first_10_bytes_of_kvs = &[123, 34, 83, 101, 116, 34, 58, 91, 34, 34];
+            let mut file = OpenOptions::new().read(true).open(&full_path).unwrap();
+            let mut first_bytes = [0; 10];
+            file.read(&mut first_bytes);
+            if !first_bytes.starts_with(first_10_bytes_of_kvs) {
+                return Err(KvError::IoError("Unable to open!".to_owned()));
+            }
         }
 
-        Ok(store)
+        if let Ok(file) = OpenOptions::new().read(true).open(&full_path) {
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                if let Ok(cmd) = line {
+                    if let Ok(cmd) = serde_json::from_str::<KvsCommand>(&cmd) {
+                        KvStore::load(&mut store, &cmd);
+                    };
+                }
+            }
+            return Ok(store);
+        }
+
+        return Err(KvError::IoError("Unable to open!".to_owned()));
     }
 }
 
@@ -229,12 +239,31 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
-        &self.storage.remove(key);
-        Ok(())
+        match &self.storage.get(key.as_bytes()) {
+            Ok(Some(_)) => {
+                &self.storage.remove(key.into_bytes());
+                Ok(())
+            }
+            _ => Err(KvError::KeyNotFound)
+        }
     }
 
     fn open(path: &Path) -> Result<SledKvsEngine> {
-        let storage = Db::open(path.join(FILENAME)).unwrap();
-        Ok(SledKvsEngine { storage })
+        let full_path = path.join(FILENAME);
+        if !full_path.exists() {
+            let storage = Db::open(path).unwrap();
+            return Ok(SledKvsEngine { storage });
+        } else {
+            let first_10_bytes_of_sled = &[255, 186, 199, 15, 255, 255, 255, 255, 255, 255];
+            let mut file = OpenOptions::new().read(true).open(full_path).unwrap();
+            let mut first_bytes = [0; 10];
+            file.read(&mut first_bytes);
+            if !first_bytes.starts_with(first_10_bytes_of_sled) {
+                return Err(KvError::IoError("Unable to open!".to_owned()));
+            }
+        }
+
+        let storage = Db::open(path).unwrap();
+        return Ok(SledKvsEngine { storage });
     }
 }
