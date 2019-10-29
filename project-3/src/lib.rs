@@ -61,7 +61,7 @@ pub trait KvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()>;
     fn get(&mut self, key: String) -> Result<Option<String>>;
     fn remove(&mut self, key: String) -> Result<()>;
-    fn open(path: &Path) -> Self where Self: Sized;
+    fn open(path: &Path) -> Result<Self> where Self: Sized;
 }
 
 #[derive(Debug, Default)]
@@ -99,7 +99,7 @@ impl KvStore {
 
     fn save(store: &KvStore, command: &KvsCommand) -> Result<()> {
         let path = Path::new(&store.path);
-        let path_count_str = format!("{}c", &store.path);
+        let path_count_str = format!("{}-count", &store.path);
         let path_count = Path::new(&path_count_str);
 
         let mut count = 0;
@@ -190,23 +190,27 @@ impl KvsEngine for KvStore {
         }
     }
 
-    fn open(path: &Path) -> KvStore {
+    fn open(path: &Path) -> Result<KvStore> {
         let full_path = path.join(FILENAME);
         let mut store = KvStore::new();
         store.path = full_path.to_str().unwrap().to_string();
 
-        if let Ok(file) = OpenOptions::new().read(true).open(&full_path) {
-            let reader = BufReader::new(file);
-            for line in reader.lines() {
-                if let Ok(cmd) = line {
-                    if let Ok(cmd) = serde_json::from_str::<KvsCommand>(&cmd) {
-                        KvStore::load(&mut store, &cmd);
+        match OpenOptions::new().read(true).open(&full_path) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                for line in reader.lines() {
+                    if let Ok(cmd) = line {
+                        match serde_json::from_str::<KvsCommand>(&cmd) {
+                            Ok(cmd) => Ok(KvStore::load(&mut store, &cmd)),
+                            Err(e) => Err(KvError::SerdeError(e.to_string())),
+                        };
                     }
                 }
-            }
+            },
+            Err(_) => ()
         }
 
-        store
+        Ok(store)
     }
 }
 
@@ -217,11 +221,11 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn get(&mut self, key: String) -> Result<Option<String>> {
-       match &self.storage.get(key.into_bytes()) {
-           Ok(Some(value)) => Ok(Some(from_utf8(value.as_ref()).unwrap().to_string())),
-           Ok(None) => Ok(None),
-           Err(err) => Err(KvError::KeyNotFound),
-       }
+        match &self.storage.get(key.into_bytes()) {
+            Ok(Some(value)) => Ok(Some(from_utf8(value.as_ref()).unwrap().to_string())),
+            Ok(None) => Ok(None),
+            Err(err) => Err(KvError::KeyNotFound),
+        }
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
@@ -229,8 +233,8 @@ impl KvsEngine for SledKvsEngine {
         Ok(())
     }
 
-    fn open(path: &Path) -> SledKvsEngine {
-        let storage = Db::open(path.join(FILENAME).join("sled")).unwrap();
-        SledKvsEngine { storage }
+    fn open(path: &Path) -> Result<SledKvsEngine> {
+        let storage = Db::open(path.join(FILENAME)).unwrap();
+        Ok(SledKvsEngine { storage })
     }
 }

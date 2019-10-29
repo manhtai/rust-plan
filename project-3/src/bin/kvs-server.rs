@@ -5,7 +5,7 @@ use clap::{App, Arg};
 use kvs::{KvsCommand, KvsResult, KvStore, KvsEngine, SledKvsEngine, Result};
 use std::io::{Read, Write, BufReader, BufRead};
 use std::net::{TcpListener, TcpStream};
-
+use std::env;
 
 fn exchange(mut stream: TcpStream, store: &mut dyn KvsEngine) -> Result<()> {
     let mut buf = String::new();
@@ -66,16 +66,18 @@ fn main() -> Result<()> {
     let mut sled_;
     let mut store: &mut dyn KvsEngine;
     if engine == "kvs" {
-        kvs_ = KvStore::open(Path::new("."));
+        kvs_ = KvStore::open(Path::new("."))?;
         store = &mut kvs_;
     } else {
-        sled_ = SledKvsEngine::open(Path::new("."));
+        sled_ = SledKvsEngine::open(Path::new("."))?;
         store = &mut sled_;
     }
 
     let addr = matches.value_of("address").unwrap_or("127.0.0.1:4000");
-    println!("Server listen in: {}", addr);
     let listener = TcpListener::bind(addr).unwrap();
+
+    eprintln!(env!("CARGO_PKG_VERSION"));
+    eprintln!("Server listen in: {} with engine: {}", addr, engine);
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
