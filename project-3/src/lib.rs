@@ -227,6 +227,7 @@ impl KvsEngine for KvStore {
 impl KvsEngine for SledKvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()> {
         &self.storage.insert(key.into_bytes(), value.into_bytes());
+        &self.storage.flush();
         Ok(())
     }
 
@@ -242,6 +243,7 @@ impl KvsEngine for SledKvsEngine {
         match &self.storage.get(key.as_bytes()) {
             Ok(Some(_)) => {
                 &self.storage.remove(key.into_bytes());
+                &self.storage.flush();
                 Ok(())
             }
             _ => Err(KvError::KeyNotFound)
