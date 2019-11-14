@@ -10,6 +10,8 @@ use sled::Db;
 use serde::{Deserialize, Serialize};
 use failure::_core::str::from_utf8;
 
+pub mod thread_pool;
+
 const FILENAME: &str = "db";
 const COMPACT_LIMIT: i32 = 1_000;
 
@@ -162,6 +164,10 @@ impl KvStore {
             Ok(_) => Ok(()),
             Err(err) => Err(KvError::IoError(err.to_string())),
         }
+    }
+
+    fn clone(&self) -> Self {
+        return KvStore{ storage: self.storage.clone(), path: self.path.clone() }
     }
 }
 
